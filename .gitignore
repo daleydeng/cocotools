@@ -1,0 +1,4 @@
+.*
+samples/nuts/
+__pycache__
+!.git*
