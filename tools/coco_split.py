@@ -26,7 +26,7 @@ def main(start, end, src, dst):
     anns = data['annotations']
 
     if end > 0:
-        if end < 1: # ratio
+        if end < 1 or 0 < start < 1: # ratio
             end = end * len(imgs)
             start = start * len(imgs)
 
