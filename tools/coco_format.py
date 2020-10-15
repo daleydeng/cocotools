@@ -13,10 +13,15 @@ def main(out, src):
         out = src
 
     data = json.load(open(src))
+    cat_dic = {i['id']: i for i in data['categories']}
 
     valid_img_ids = set(i['image_id'] for i in data['annotations'])
     for i in data['images']:
         i['file_name'] = osp.basename(i['file_name'])
+
+    for i in data['annotations']:
+        if 'ignore' in cat_dic[i['category_id']]['name']:
+            i['iscrowd'] = 1
 
     out_data = deepcopy(data)
     out_data['images'] = []

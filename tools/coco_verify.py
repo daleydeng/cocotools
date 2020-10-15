@@ -40,7 +40,7 @@ def ann_to_mask(ann, img_shape):
     m = coco_mask.decode(rle)
     return m
 
-def process_one(d, img_dir, out_dir, color_masks, class_dic, draw_cfg):
+def process_one(d, img_dir, out_dir, color_map, class_dic, draw_cfg):
     img, anns = d
     fname = img['file_name']
     src_f = osp.join(img_dir, fname)
@@ -53,7 +53,7 @@ def process_one(d, img_dir, out_dir, color_masks, class_dic, draw_cfg):
 
     for ann in anns:
         ann_mask = ann_to_mask(ann, (img['height'], img['width']))
-        ann_color_img = np.dstack([ann_mask]*3) * color_masks[ann['category_id']]
+        ann_color_img = np.dstack([ann_mask]*3) * color_map[ann['category_id']]
         ann_mask = ann_mask > 0.5
 
         I[ann_mask, :] = 0.5 * I[ann_mask, :] + 0.5 * ann_color_img[ann_mask, :]
@@ -111,7 +111,7 @@ def main(no_bbox, thickness, bbox_color, text_color, font_scale, show, jobs, ann
 
     class_dic = {i['id']: i['name'] for i in cats}
 
-    color_masks = {
+    color_map = {
         i: npr.randint(0, 256, (1, 3), dtype=np.uint8)
         for i in class_dic
     }
@@ -131,7 +131,7 @@ def main(no_bbox, thickness, bbox_color, text_color, font_scale, show, jobs, ann
         process_one,
         img_dir=img_dir,
         out_dir=out_dir,
-        color_masks=color_masks,
+        color_map=color_map,
         class_dic=class_dic,
         draw_cfg=draw_cfg,
     )
