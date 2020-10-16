@@ -11,32 +11,27 @@ from skimage.io import imread, imsave
 from easydict import EasyDict as edict
 import cv2
 from pprint import pprint
+from matplotlib.colors import to_rgb
 import pylab as plt
 from tqdm import tqdm
 import click
 
-def ann_to_rle(ann, img_shape):
-    """
-    Convert annotation which can be polygons, uncompressed RLE to RLE.
-    :return: binary mask (numpy 2D array)
-    """
+def segm_to_rle(segm, img_shape):
     h, w = img_shape
-    segm = ann['segmentation']
     if type(segm) == list:
         # polygon -- a single object might consist of multiple parts
         # we merge all parts into one mask rle code
         rles = coco_mask.frPyObjects(segm, h, w)
-        rle = coco_mask.merge(rles)
-    elif type(segm['counts']) == list:
-        # uncompressed RLE
-        rle = coco_mask.frPyObjects(segm, h, w)
-    else:
-        # rle
-        rle = ann['segmentation']
-    return rle
+        return coco_mask.merge(rles)
 
-def ann_to_mask(ann, img_shape):
-    rle = ann_to_rle(ann, img_shape)
+    if type(segm['counts']) == list:
+        # uncompressed RLE
+        return coco_mask.frPyObjects(segm, h, w)
+
+    return segm
+
+def get_ann_mask(ann, img_shape):
+    rle = segm_to_rle(ann['segmentation'], img_shape)
     m = coco_mask.decode(rle)
     return m
 
@@ -52,7 +47,7 @@ def process_one(d, img_dir, out_dir, color_map, class_dic, draw_cfg):
     img0 = I.copy()
 
     for ann in anns:
-        ann_mask = ann_to_mask(ann, (img['height'], img['width']))
+        ann_mask = get_ann_mask(ann, (img['height'], img['width']))
         ann_color_img = np.dstack([ann_mask]*3) * color_map[ann['category_id']]
         ann_mask = ann_mask > 0.5
 
@@ -63,10 +58,10 @@ def process_one(d, img_dir, out_dir, color_map, class_dic, draw_cfg):
             x0, y0, w, h = map(int, ann['bbox'])
             x1, y1 = x0 + w, y0 + h
 
-            cv2.rectangle(I, (x0, y0), (x1, y1), COLOR_TAB[draw_cfg.bbox_color], thickness=draw_cfg.thickness)
+            cv2.rectangle(I, (x0, y0), (x1, y1), draw_cfg.bbox_color, thickness=draw_cfg.thickness)
 
             label_text = class_dic[ann['category_id']]
-            cv2.putText(I, label_text, (x0, y0-2), cv2.FONT_HERSHEY_COMPLEX, draw_cfg.font_scale, COLOR_TAB[draw_cfg.text_color])
+            cv2.putText(I, label_text, (x0, y0-2), cv2.FONT_HERSHEY_COMPLEX, draw_cfg.font_scale, draw_cfg.text_color)
 
     canvas = np.hstack((img0, I))
     if draw_cfg.show:
@@ -77,23 +72,28 @@ def process_one(d, img_dir, out_dir, color_map, class_dic, draw_cfg):
 
     imsave(dst_f, canvas)
 
+def get_color(v):
+    r, g, b = to_rgb(v)[:3]
+    return int(r * 255), int(g * 255), int(b * 255)
 
-COLOR_TAB = {
-    'green': (0, 255, 0),
-}
+def get_cmap_color(v, cmap):
+    r, g, b = cmap(v)[:3]
+    return int(r * 255), int(g * 255), int(b * 255)
 
 @click.command()
 @click.option('--no_bbox', is_flag=True)
 @click.option('--thickness', default=1)
-@click.option('--bbox_color', default='green')
-@click.option('--text_color', default='green')
+@click.option('--bbox_color', default='g')
+@click.option('--text_color', default='g')
 @click.option('--font_scale', default=0.5)
+@click.option('--cmap', default='hsv')
+@click.option('--ignore_color', default='black')
 @click.option('--show', is_flag=True)
 @click.option('--jobs', default=-1)
 @click.argument('ann_file')
 @click.argument('img_dir')
 @click.argument('out_dir')
-def main(no_bbox, thickness, bbox_color, text_color, font_scale, show, jobs, ann_file, img_dir, out_dir):
+def main(no_bbox, thickness, bbox_color, text_color, font_scale, cmap, ignore_color, show, jobs, ann_file, img_dir, out_dir):
     if show:
         jobs = 1
 
@@ -102,19 +102,22 @@ def main(no_bbox, thickness, bbox_color, text_color, font_scale, show, jobs, ann
 
     os.makedirs(out_dir, exist_ok=True)
 
-    # import json
-    # data = json.load(open(ann_file))
     coco = COCO(ann_file)
-    cats = coco.loadCats(coco.getCatIds())
+    cats = coco.cats
     print ("COCO categories:")
     pprint (cats)
 
-    class_dic = {i['id']: i['name'] for i in cats}
+    ignore_ids = [k for k, v in cats.items() if 'ignore' in v['name']]
+    class_dic = {k: v['name'] for k, v in cats.items()}
 
+    cmap = plt.get_cmap(cmap)
     color_map = {
-        i: npr.randint(0, 256, (1, 3), dtype=np.uint8)
-        for i in class_dic
+        i: get_cmap_color(idx / len(class_dic), cmap)
+        for idx, i in enumerate(class_dic)
     }
+
+    for i in ignore_ids:
+        color_map[i] = get_color(ignore_color)
 
     img_ids = coco.getImgIds()
     imgs = coco.loadImgs(img_ids)
@@ -123,8 +126,8 @@ def main(no_bbox, thickness, bbox_color, text_color, font_scale, show, jobs, ann
         show=show,
         no_bbox=no_bbox,
         thickness=thickness,
-        bbox_color=bbox_color,
-        text_color=text_color,
+        bbox_color=get_color(bbox_color),
+        text_color=get_color(text_color),
         font_scale=font_scale,
     )
     process_worker = partial(
