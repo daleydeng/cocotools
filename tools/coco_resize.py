@@ -10,20 +10,27 @@ import json
 from tqdm import tqdm
 import click
 
-def rescale_coords(coords, scale):
+def clamp(v, max_v, min_v=0):
+    return max(min(v, max_v), min_v)
+
+def rescale_coords(coords, scale, img_size):
+    w, h = img_size
     sx, sy = scale
     out = []
     for i, x in enumerate(coords):
         if i % 2 == 0:
             s = sx
+            max_v = w
         else:
             s = sy
+            max_v = h
 
-        out.append(x * s)
+        out.append(clamp(x * s, max_v))
 
     return out
 
-def rescale_keypoints(xs, scale):
+def rescale_keypoints(xs, scale, img_size):
+    w, h = img_size
     sx, sy = scale
     out = []
     for i, x in enumerate(xs):
@@ -33,15 +40,19 @@ def rescale_keypoints(xs, scale):
 
         if i % 3 == 0:
             s = sx
+            max_v = w
         elif i % 3 == 1:
             s = sy
+            max_v = h
 
-        out.append(x * s)
+        out.append(clamp(x * s, max_v))
 
     return out
 
-def rescale_bbox(bbox, scale):
-    return [bbox[0] * sx, bbox[1] * sy, bbox[2] * sx, bbox[3] * sy]
+def rescale_bbox(bbox, scale, img_size):
+    w, h = img_size
+    return [clamp(bbox[0] * sx, w), clamp(bbox[1] * sy, h),
+            clamp(bbox[2] * sx, w), clamp(bbox[3] * sy, h)]
 
 def calc_polygon_area(p):
     return Polygon(list(zip(p[::2], p[1::2]))).area
@@ -73,7 +84,8 @@ def main(width, jobs, ann_file, img_dir, out_dir):
 
     img_dic_by_id = {i['id']: i for i in data['images']}
     img_dic_by_name = {i['file_name']: i for i in data['images']}
-    scales = {k: (width / v['width'], width / v['width'])
+    scales = {k: (width / max(v['width'], v['height']),
+                  width / max(v['width'], v['height']))
               for k, v in img_dic_by_id.items()}
 
     for img in data['images']:
@@ -81,17 +93,20 @@ def main(width, jobs, ann_file, img_dir, out_dir):
         img['width'] = int(img['width'] * sx)
         img['height'] = int(img['height'] * sy)
 
+    img_sizes = {i['id']: (i['width'], i['height']) for i in data['images']}
+
     for ann in data['annotations']:
         img_id = ann['image_id']
         scale = scales[img_id]
+        img_size = img_sizes[img_id]
 
-        ann['bbox'] = rescale_coords(ann['bbox'], scale)
-        ann['segmentation'] = [rescale_coords(i, scale)
+        ann['bbox'] = rescale_coords(ann['bbox'], scale, img_size)
+        ann['segmentation'] = [rescale_coords(i, scale, img_size)
                                for i in ann['segmentation']]
         ann['area'] = sum(calc_polygon_area(i) for i in ann['segmentation'])
 
         if 'keypoints' in ann:
-            ann['keypoints'] = rescale_keypoints(ann['keypoints'], scale)
+            ann['keypoints'] = rescale_keypoints(ann['keypoints'], scale, img_size)
 
     dst_json = osp.join(out_dir, 'annotations', osp.basename(ann_file))
     os.makedirs(osp.dirname(dst_json), exist_ok=True)
