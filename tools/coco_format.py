@@ -5,6 +5,29 @@ from copy import deepcopy
 import json
 import click
 
+def clamp(v, max_v, min_v=0):
+    return max(min(v, max_v), min_v)
+
+def clamp_coords(coords, img_size, stride=2):
+    imw, imh = img_size
+    out = []
+    for i, x in enumerate(coords):
+        if i % stride == 0:
+            x = clamp(x, imw-1)
+        elif i % stride == 1:
+            x = clamp(x, imh-1)
+
+        out.append(x)
+    return out
+
+def clamp_bbox(bbox, img_size):
+    imw, imh = img_size
+    x, y, w, h = bbox
+
+    x0, x1 = clamp(x, imw-1), clamp(x + w, imw-1)
+    y0, y1 = clamp(y, imh-1), clamp(y + h, imh-1)
+    return [x0, y0, x1 - x0, y1 - y0]
+
 @click.command()
 @click.option('--out', '-o', default='')
 @click.option('--ignore_id', default=128)
@@ -22,14 +45,23 @@ def main(out, ignore_id, src):
 
     ignore_id_map = {i: 128 for i in ignore_ids}
 
+    img_sizes = {i['id']: (i['width'], i['height']) for i in data['images']}
+
     valid_img_ids = set(i['image_id'] for i in data['annotations'])
     for i in data['images']:
         i['file_name'] = osp.basename(i['file_name'])
 
-    for i in data['annotations']:
-        if i['category_id'] in ignore_ids:
-            i['iscrowd'] = 1
-            i['category_id'] = ignore_id_map[i['category_id']]
+    for ann in data['annotations']:
+        if ann['category_id'] in ignore_ids:
+            ann['iscrowd'] = 1
+            ann['category_id'] = ignore_id_map[ann['category_id']]
+
+        img_size = img_sizes[ann['image_id']]
+        clamp_bbox(ann['bbox'], img_size)
+        for i in ann['segmentation']:
+            clamp_coords(i, img_size)
+        if 'keypoints' in ann:
+            clamp_coords(ann['keypoints'], img_size, stride=3)
 
     for i in data['categories']:
         if i['id'] in ignore_ids:
@@ -47,6 +79,7 @@ def main(out, ignore_id, src):
 
     img_dic = {i['id']: i for i in data['images']}
     print ("empty images", [img_dic[i]['file_name'] for i in (img_dic.keys() - valid_img_ids)])
+    os.makedirs(osp.dirname(out), exist_ok=True)
     json.dump(out_data, open(out, 'w'), indent=2, sort_keys=True)
 
 if __name__ == "__main__":
