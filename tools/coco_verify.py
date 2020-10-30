@@ -55,6 +55,9 @@ def process_one(d, img_dir, out_dir, seg_dir, color_map, class_dic, mask_thr=0.5
     cfg = edict(cfg)
 
     img, anns = d
+    if not anns:
+        return
+
     fname = img['file_name']
     src_f = osp.join(img_dir, fname)
     dst_f = osp.join(out_dir, fname)
@@ -117,7 +120,9 @@ def get_cmap_color(v, cmap):
 @click.option('--thickness', default=1)
 @click.option('--bbox_color', default='g')
 @click.option('--text_color', default='g')
+@click.option('--warn_text_color', default='r')
 @click.option('--font_scale', default=0.5)
+@click.option('--warn_font_scale', default=0.5)
 @click.option('--cmap', default='hsv')
 @click.option('--ignore_color', default='black')
 @click.option('--inst_border_size', default=3)
@@ -128,7 +133,7 @@ def get_cmap_color(v, cmap):
 @click.argument('ann_file')
 @click.argument('img_dir')
 @click.argument('out_dir')
-def main(no_bbox, thickness, bbox_color, text_color, font_scale, cmap, ignore_color, inst_border_size, blend_alpha, show, jobs, semseg, ann_file, img_dir, out_dir):
+def main(no_bbox, thickness, bbox_color, text_color, warn_text_color, font_scale, warn_font_scale, cmap, ignore_color, inst_border_size, blend_alpha, show, jobs, semseg, ann_file, img_dir, out_dir):
     if show:
         jobs = 1
 
@@ -170,7 +175,9 @@ def main(no_bbox, thickness, bbox_color, text_color, font_scale, cmap, ignore_co
         thickness=thickness,
         bbox_color=get_color(bbox_color),
         text_color=get_color(text_color),
+        warn_text_color=get_color(warn_text_color),
         font_scale=font_scale,
+        warn_font_scale=warn_font_scale,
         inst_border_size=inst_border_size,
         blend_alpha=blend_alpha,
     )
