@@ -47,6 +47,9 @@ def main(force, ann_file, out_dir):
         anns = coco.loadAnns(ann_ids)
         for ann in anns:
             cat_id = ann['category_id']
+            if not ann['segmentation']:
+                continue
+
             mask = get_ann_mask(ann, img_shape)
             mask = mask > 0.5
             segmap[mask] = cat_id

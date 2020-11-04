@@ -7,6 +7,7 @@ import multiprocessing as mp
 from functools import partial
 from pycocotools.coco import COCO
 import pycocotools.mask as coco_mask
+from skimage.color import gray2rgb
 from skimage.io import imread, imsave
 from skimage.morphology import binary_erosion, disk
 from easydict import EasyDict as edict
@@ -65,9 +66,13 @@ def process_one(d, img_dir, out_dir, seg_dir, color_map, class_dic, mask_thr=0.5
         return
 
     I = imread(src_f)
+    I = gray2rgb(I)
     img0 = I.copy()
 
     for ann in anns:
+        if not ann['segmentation']:
+            continue
+
         color = color_map[ann['category_id']]
         face_mask = get_ann_mask(ann, (img['height'], img['width']))
         face_mask = face_mask > mask_thr
