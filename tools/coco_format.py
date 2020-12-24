@@ -31,12 +31,13 @@ def clamp_bbox(bbox, img_size):
 @click.command()
 @click.option('--out', '-o', default='')
 @click.option('--ignore_id', default=128)
-@click.argument('src')
-def main(out, ignore_id, src):
+@click.argument('ann_f')
+@click.argument('img_dir')
+def main(out, ignore_id, ann_f, img_dir):
     if not out:
-        out = src
+        out = ann_f
 
-    data = json.load(open(src))
+    data = json.load(open(ann_f))
     cats = {i['id']: i for i in data['categories']}
 
     assert all(i > 0 for i in cats)
@@ -45,7 +46,21 @@ def main(out, ignore_id, src):
 
     ignore_id_map = {i: 128 for i in ignore_ids}
 
+    valid_images = []
+    for i in data['images']:
+        i = deepcopy(i)
+        i['file_name'] = osp.basename(i['file_name'])
+        if osp.exists(osp.join(img_dir, i['file_name'])):
+            valid_images.append(i)
+
+    data['images'] = valid_images
     img_sizes = {i['id']: (i['width'], i['height']) for i in data['images']}
+
+    valid_anns = []
+    for i in data['annotations']:
+        if i['image_id'] in img_sizes:
+            valid_anns.append(i)
+    data['annotations'] = valid_anns
 
     valid_img_ids = set(i['image_id'] for i in data['annotations'])
     for i in data['images']:
@@ -78,7 +93,7 @@ def main(out, ignore_id, src):
             out_data['images'].append(i)
 
     img_dic = {i['id']: i for i in data['images']}
-    print ("empty images", [img_dic[i]['file_name'] for i in (img_dic.keys() - valid_img_ids)])
+    print ("image_ids - annotation_image_ids", [img_dic[i]['file_name'] for i in (img_dic.keys() - valid_img_ids)])
     os.makedirs(osp.dirname(out), exist_ok=True)
     json.dump(out_data, open(out, 'w'), indent=2, sort_keys=True)
 

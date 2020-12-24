@@ -52,7 +52,7 @@ def draw_color_bar(class_dic, color_map, shape, block_shape=(20, 50), **kws):
 
     return canvas
 
-def process_one(d, img_dir, out_dir, seg_dir, color_map, class_dic, mask_thr=0.5, cbar_width=300, **cfg):
+def process_one(d, img_dir, out_dir, seg_dir, color_map, class_dic, rescale=1, mask_thr=0.5, cbar_width=300, **cfg):
     cfg = edict(cfg)
 
     img, anns = d
@@ -63,6 +63,9 @@ def process_one(d, img_dir, out_dir, seg_dir, color_map, class_dic, mask_thr=0.5
     src_f = osp.join(img_dir, fname)
     dst_f = osp.join(out_dir, fname)
     if osp.exists(dst_f):
+        return
+
+    if not osp.exists(src_f):
         return
 
     I = imread(src_f)
@@ -76,8 +79,7 @@ def process_one(d, img_dir, out_dir, seg_dir, color_map, class_dic, mask_thr=0.5
         color = color_map[ann['category_id']]
         face_mask = get_ann_mask(ann, (img['height'], img['width']))
         face_mask = face_mask > mask_thr
-        mask = np.logical_xor(face_mask, binary_erosion(face_mask, disk(cfg\
-.inst_border_size)))
+        mask = np.logical_xor(face_mask, binary_erosion(face_mask, disk(cfg.inst_border_size)))
 
         I[mask, :] = color
 
@@ -104,6 +106,11 @@ def process_one(d, img_dir, out_dir, seg_dir, color_map, class_dic, mask_thr=0.5
     color_bar = draw_color_bar(class_dic, color_map, (img0.shape[0], cbar_width))
 
     canvas = np.hstack((img0, I, color_bar))
+    h, w = canvas.shape[:2]
+    if rescale != 1:
+        h1, w1 = int(h * rescale), int(w * rescale)
+        canvas = cv2.resize(canvas, (w1, h1))
+
     if cfg.show:
         plt.title(fname)
         plt.imshow(canvas)
@@ -135,10 +142,11 @@ def get_cmap_color(v, cmap):
 @click.option('--show', is_flag=True)
 @click.option('--jobs', default=-1)
 @click.option('--semseg', default='')
+@click.option('--rescale', default=0.5)
 @click.argument('ann_file')
 @click.argument('img_dir')
 @click.argument('out_dir')
-def main(no_bbox, thickness, bbox_color, text_color, warn_text_color, font_scale, warn_font_scale, cmap, ignore_color, inst_border_size, blend_alpha, show, jobs, semseg, ann_file, img_dir, out_dir):
+def main(no_bbox, thickness, bbox_color, text_color, warn_text_color, font_scale, warn_font_scale, cmap, ignore_color, inst_border_size, blend_alpha, show, jobs, semseg, rescale, ann_file, img_dir, out_dir):
     if show:
         jobs = 1
 
@@ -174,6 +182,8 @@ def main(no_bbox, thickness, bbox_color, text_color, warn_text_color, font_scale
         seg_dir=semseg,
         color_map=color_map,
         class_dic=class_dic,
+
+        rescale=rescale,
 
         show=show,
         no_bbox=no_bbox,
